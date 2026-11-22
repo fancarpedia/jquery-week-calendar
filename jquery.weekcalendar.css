@@ -160,6 +160,10 @@ table.wc-time-slots {
 
 
 .wc-time-slot {
+    /* The script sets the content height one pixel below the slot size to
+       account for this border. Keep that calculation independent of any
+       global border-box reset from the page or jQuery UI theme. */
+    box-sizing: content-box;
     border-bottom: 1px dotted #ddd;
 }
 
