@@ -1,5 +1,5 @@
 /*
- * jQuery.weekCalendar v2.0-dev
+ * jQuery.weekCalendar v3.0-dev // jQuery 3.x
  *
  * for support join us at the google group:
  *    - http://groups.google.com/group/jquery-week-calendar
@@ -561,7 +561,7 @@
         */
       _resizeCalendar: function() {
         var options = this.options;
-        if (options && $.isFunction(options.height)) {
+        if (options && typeof options.height === 'function') {
           var calendarHeight = options.height(this.element);
           var headerHeight = this.element.find('.wc-header').outerHeight();
           var navHeight = this.element.find('.wc-toolbar').outerHeight();
@@ -745,7 +745,7 @@
                       _label.html(label);
                       _input.val(option);
                       if (parseInt(self.options.daysToShow, 10) === parseInt(option, 10)) {
-                        _input.attr('checked', 'checked');
+                        _input.prop('checked', true);
                       }
                       $container
                         .append(_input)
@@ -755,7 +755,14 @@
                   self.setDaysToShow(parseInt($(this).val(), 10));
                 });
             }
-            $calendarContainer.find('.wc-nav, .wc-display').buttonset();
+            // SnazzyBee Fix
+            $calendarContainer.find('.wc-nav, .wc-display')
+            //.find("input[type='radio']").hide() // Hide radios before initializing
+	        //.end()
+    	    .controlgroup();
+            $calendarContainer.find('.wc-nav, .wc-display').find('.ui-checkboxradio-icon').hide()
+    	    
+            
             var _height = $calendarContainer.find('.wc-nav').outerHeight();
             $calendarContainer.find('.wc-title')
               .height(_height)
@@ -789,7 +796,8 @@
         for (var i = 1; i <= options.daysToShow; i++) {
           calendarHeaderHtml += '<td class=\"wc-day-column-header wc-day-' + i + '\"' + colspan + '></td>';
         }
-        calendarHeaderHtml += '<td class=\"wc-scrollbar-shim\"' + rowspan + '></td></tr>';
+        // SnazzyBee Fix
+//        calendarHeaderHtml += '<td class=\"wc-scrollbar-shim\"' + rowspan + '></td></tr>';
 
         //users row
         if (showAsSeparatedUser) {
@@ -1240,7 +1248,7 @@
               }
             });
           }
-          else if ($.isFunction(options.data)) {
+          else if (typeof options.data === 'function') {
             options.data(weekStartDate, weekEndDate,
                   function(data) {
                       self._renderEvents(data, $weekDayColumns);
@@ -1256,32 +1264,34 @@
       /**
        * Draws a thin line which indicates the current time.
        */
-      _drawCurrentHourLine: function() {
-        var d = new Date(),
-            options = this.options,
-            businessHours = options.businessHours;
 
-        // first, we remove the old hourline if it exists
-        $('.wc-hourline', this.element).remove();
+_drawCurrentHourLine: function() {
+    var d = new Date(),
+        options = this.options,
+        businessHours = options.businessHours;
 
-        // the line does not need to be displayed
-        if (businessHours.limitDisplay && d.getHours() > businessHours.end) {
-          return;
-        }
+    $('.wc-hourline', this.element).remove();
 
-        // then we recreate it
-        var paddingStart = businessHours.limitDisplay ? businessHours.start : 0;
-        var nbHours = d.getHours() - paddingStart + d.getMinutes() / 60;
-        var positionTop = nbHours * options.timeslotHeight * options.timeslotsPerHour;
-        var lineWidth = $('.wc-scrollable-grid .wc-today', this.element).width() + 3;
+    if (businessHours.limitDisplay && d.getHours() > businessHours.end) {
+        return;
+    }
 
-        $('.wc-scrollable-grid .wc-today', this.element).append(
-          $('<div>', {
-            'class': 'wc-hourline',
-            style: 'top: ' + positionTop + 'px; width: ' + lineWidth + 'px'
-          })
-        );
-      },
+    var paddingStart = businessHours.limitDisplay ? businessHours.start : 0;
+    var nbHours = d.getHours() - paddingStart + d.getMinutes() / 60;
+    var positionTop = nbHours * options.timeslotHeight * options.timeslotsPerHour;
+
+    // Append to the same positioned element used for event positioning.
+    var $todayColumns = $('.wc-scrollable-grid .wc-today .wc-day-column-inner', this.element);
+
+    $todayColumns.each(function() {
+        $('<div>', {
+            'class': 'wc-hourline'
+        }).css({
+            top: positionTop + 'px',
+            width: '100%'
+        }).appendTo(this);
+    });
+},
 
       /*
         * update the display of each day column header based on the calendar week
@@ -1372,7 +1382,7 @@
        * Gets the calendar raw title.
        */
       _getCalendarTitle: function() {
-        if ($.isFunction(this.options.title)) {
+        if (typeof this.options.title === 'function') {
           return this.options.title(this.options.daysToShow);
         }
 
@@ -1693,14 +1703,22 @@
       _positionEvent: function($weekDay, $calEvent) {
           var options = this.options;
           var calEvent = $calEvent.data('calEvent');
-          var pxPerMillis = $weekDay.height() / options.millisToDisplay;
           var firstHourDisplayed = options.businessHours.limitDisplay ? options.businessHours.start : 0;
           var startMillis = this._getDSTdayShift(calEvent.start).getTime() - this._getDSTdayShift(new Date(calEvent.start.getFullYear(), calEvent.start.getMonth(), calEvent.start.getDate(), firstHourDisplayed)).getTime();
           var eventMillis = this._getDSTdayShift(calEvent.end).getTime() - this._getDSTdayShift(calEvent.start).getTime();
+
+          // Position events using the configured slot dimensions, not the measured
+          // weekday column height. The latter can differ from the grid's real
+          // timeslot geometry because of CSS borders, padding or box sizing.
+          var pxPerMillis = options.timeslotHeight / options.millisPerTimeslot;
           var pxTop = pxPerMillis * startMillis;
           var pxHeight = pxPerMillis * eventMillis;
-          //var pxHeightFallback = pxPerMillis * (60 / options.timeslotsPerHour) * 60 * 1000;
-      $calEvent.css({top: pxTop, height: pxHeight || (pxPerMillis * 3600000 / options.timeslotsPerHour)});
+          var minimumEventHeight = options.timeslotHeight;
+
+          $calEvent.css({
+            top: pxTop,
+            height: Math.max(pxHeight, minimumEventHeight)
+          });
       },
 
       /*
@@ -2020,17 +2038,13 @@
        */
       _disableTextSelect: function($elements) {
           $elements.each(function() {
-            if ($.browser.mozilla) {//Firefox
-                $(this).css('MozUserSelect', 'none');
-            } else if ($.browser.msie) {//IE
-                $(this).bind('selectstart', function() {
-                  return false;
-                });
-            } else {//Opera, etc.
-                $(this).mousedown(function() {
-                  return false;
-                });
-            }
+              //MOD: yk
+              $(this)
+              .attr('unselectable', 'on')
+              .css('user-select', 'none')
+              .css('MozUserSelect', 'none')
+              .on('selectstart', false)
+              .on('mousedown', false);
           });
       },
 
@@ -2115,7 +2129,7 @@
       },
 
       _firstDayOfWeek: function() {
-        if ($.isFunction(this.options.firstDayOfWeek)) {
+        if (typeof this.options.firstDayOfWeek === 'function') {
           return this.options.firstDayOfWeek(this.element);
         }
         return this.options.firstDayOfWeek;
@@ -2277,7 +2291,7 @@
           var self = this;
           var options = this.options;
           var user = options.users[index];
-          if ($.isFunction(options.getUserName)) {
+          if (typeof options.getUserName === 'function') {
           return options.getUserName(user, index, self.element);
           }
           else {
@@ -2290,7 +2304,7 @@
       _getUserIdFromIndex: function(index) {
           var self = this;
           var options = this.options;
-          if ($.isFunction(options.getUserId)) {
+          if (typeof options.getUserId === 'function') {
           return options.getUserId(options.users[index], index, self.element);
           }
           return index;
@@ -2316,7 +2330,7 @@
           var self = this;
           var options = this.options;
           if (options.showAsSeparateUsers && options.users && options.users.length) {
-            if ($.isFunction(options.getEventUserId)) {
+            if (typeof options.getEventUserId === 'function') {
             return options.getEventUserId(calEvent, self.element);
             }
             return calEvent.userId;
@@ -2330,7 +2344,7 @@
       _setEventUserId: function(calEvent, userId) {
           var self = this;
           var options = this.options;
-          if ($.isFunction(options.setEventUserId)) {
+          if (typeof options.setEventUserId === 'function') {
             return options.setEventUserId(userId, calEvent, self.element);
           }
           calEvent.userId = userId;
@@ -2343,7 +2357,7 @@
       _getFreeBusyUserId: function(freeBusy) {
         var self = this;
         var options = this.options;
-        if ($.isFunction(options.getFreeBusyUserId)) {
+        if (typeof options.getFreeBusyUserId === 'function') {
           return options.getFreeBusyUserId(freeBusy.getOption(), self.element);
         }
         return freeBusy.getOption('userId');
@@ -2605,7 +2619,7 @@
           return Math.round(scroll / (options.timeslotHeight * options.timeslotsPerHour)) + 1;
       },
       _getJsonOptions: function() {
-        if ($.isFunction(this.options.jsonOptions)) {
+        if (typeof this.options.jsonOptions === 'function') {
             return $.extend({}, this.options.jsonOptions(this.element));
         }
         if ($.isPlainObject(this.options.jsonOptions)) {
@@ -2615,7 +2629,7 @@
       },
       _getHeaderDate: function(date) {
         var options = this.options;
-        if (options.getHeaderDate && $.isFunction(options.getHeaderDate))
+        if (options.getHeaderDate && typeof options.getHeaderDate === 'function')
         {
           return options.getHeaderDate(date, this.element);
         }
